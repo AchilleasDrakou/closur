@@ -288,6 +288,54 @@ ${productContext}`;
   });
 });
 
+// Get signed URL for ElevenLabs Conversational AI
+api.post("/api/signed-url", async (c) => {
+  const { scenarioId, productKey } = await c.req.json<{ scenarioId: string; productKey?: string }>();
+  const scenario = DEFAULT_SCENARIOS.find((s) => s.id === scenarioId);
+  if (!scenario) return c.json({ error: "Scenario not found" }, 404);
+
+  let productContext = "";
+  if (productKey) {
+    const product = await c.env.KV.get(productKey);
+    if (product) {
+      productContext = `\n\nProduct context for this conversation:\n${product}`;
+    }
+  }
+
+  const systemPrompt = `${scenario.persona}
+
+Tone: ${scenario.tone}
+
+The user is practicing this conversation with you. Play your role realistically.
+Push back, ask tough questions, and react authentically.
+Don't break character. Don't acknowledge you're an AI.
+${productContext}`;
+
+  // Create a signed URL via ElevenLabs API
+  const response = await fetch("https://api.elevenlabs.io/v1/convai/conversation/get_signed_url", {
+    method: "GET",
+    headers: {
+      "xi-api-key": c.env.ELEVENLABS_API_KEY,
+    },
+  });
+
+  if (!response.ok) {
+    // Fallback: return agent config for direct agentId connection
+    return c.json({
+      agentId: c.env.ELEVENLABS_AGENT_ID || "",
+      systemPrompt,
+      scenario,
+    });
+  }
+
+  const data = await response.json() as { signed_url: string };
+  return c.json({
+    signedUrl: data.signed_url,
+    systemPrompt,
+    scenario,
+  });
+});
+
 // ── Main export ───────────────────────────────────────────────────────
 
 export default {
