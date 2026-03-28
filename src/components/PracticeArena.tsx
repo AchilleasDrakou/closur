@@ -51,6 +51,11 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const acousticSendInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastAcousticRef = useRef<AcousticData | null>(null);
+  // Refs for latest values (fixes stale closure in endSession)
+  const transcriptRef = useRef<SessionData["transcript"]>([]);
+  const acousticRef = useRef<AcousticData[]>([]);
+  const nudgesRef = useRef<Nudge[]>([]);
+  const lastVizUpdate = useRef<number>(0);
 
   // Connect to CoachAgent DO
   const agent = useAgent({
@@ -80,13 +85,17 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
     onMessage: (message: { source: string; message: string }) => {
       const now = Date.now();
       if (message.source === "user") {
-        setTranscript((prev) => [...prev, { role: "user", text: message.message, timestamp: now }]);
+        const entry = { role: "user" as const, text: message.message, timestamp: now };
+        transcriptRef.current = [...transcriptRef.current, entry];
+        setTranscript([...transcriptRef.current]);
         // Analyze user speech for coaching nudges
         if (message.message.trim().length > 10) {
           agent.call("analyzeTranscript", [message.message]).catch(console.error);
         }
       } else if (message.source === "ai") {
-        setTranscript((prev) => [...prev, { role: "agent", text: message.message, timestamp: now }]);
+        const entry = { role: "agent" as const, text: message.message, timestamp: now };
+        transcriptRef.current = [...transcriptRef.current, entry];
+        setTranscript([...transcriptRef.current]);
       }
     },
     onError: (error: Error) => {
@@ -100,8 +109,9 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
 
   const addNudge = useCallback((text: string, urgency: Nudge["urgency"]) => {
     const nudge: Nudge = { text, urgency, timestamp: Date.now() };
-    setNudges((prev) => [...prev.slice(-4), nudge]);
-    // Auto-remove after 5s
+    nudgesRef.current = [...nudgesRef.current.slice(-4), nudge];
+    setNudges([...nudgesRef.current]);
+    // Auto-remove from display after 5s
     setTimeout(() => {
       setNudges((prev) => prev.filter((n) => n !== nudge));
     }, 5000);
@@ -172,10 +182,14 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
           timestamp: Date.now(),
         };
 
-        setAcousticData((prev) => [...prev, data]);
+        // Store in ref always (for endSession), throttle React state to 2fps for viz
+        acousticRef.current = [...acousticRef.current, data];
         lastAcousticRef.current = data;
-
-        animFrameRef.current = requestAnimationFrame(analyze);
+        const now = Date.now();
+        if (now - lastVizUpdate.current > 500) {
+          setAcousticData([...acousticRef.current]);
+          lastVizUpdate.current = now;
+        }
       };
 
       // Sample at ~10fps instead of every frame
@@ -209,6 +223,9 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
     setTranscript([]);
     setAcousticData([]);
     setNudges([]);
+    transcriptRef.current = [];
+    acousticRef.current = [];
+    nudgesRef.current = [];
 
     // Set scenario on the CoachAgent
     agent.call("setScenario", [scenario]).catch(console.error);
@@ -246,9 +263,9 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
     }
   }, [scenario, conversation, startAudioAnalysis, addNudge, agent]);
 
-  // End session
+  // End session — use refs for latest data (avoids stale closure)
   const endSession = useCallback(async () => {
-    await conversation.endSession();
+    try { await conversation.endSession(); } catch { /* already disconnected */ }
     stopAudioAnalysis();
     if (acousticSendInterval.current) {
       clearInterval(acousticSendInterval.current);
@@ -259,12 +276,12 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
     setIsActive(false);
 
     onEnd({
-      transcript,
-      acousticData,
-      nudges,
+      transcript: transcriptRef.current,
+      acousticData: acousticRef.current,
+      nudges: nudgesRef.current,
       duration,
     });
-  }, [conversation, stopAudioAnalysis, transcript, acousticData, nudges, onEnd]);
+  }, [conversation, stopAudioAnalysis, onEnd]);
 
   // Cleanup on unmount
   useEffect(() => {

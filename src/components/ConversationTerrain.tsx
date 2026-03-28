@@ -204,7 +204,7 @@ function buildHeightfield(
     }
 
     const smoothed = gaussianSmooth(grid, segX, segZ);
-    const maxVal = Math.max(...smoothed, 0.001);
+    const maxVal = Math.max(smoothed.reduce((m, v) => v > m ? v : m, 0), 0.001);
     for (let i = 0; i < smoothed.length; i++) smoothed[i] /= maxVal;
 
     return { heightfield: smoothed, sentimentField: sentGrid, segX, segZ, worldD: segZ * (24 / Math.max(segZ, 1)), topics: topicSet };
@@ -239,7 +239,7 @@ function buildHeightfield(
   }
 
   const smoothed = gaussianSmooth(grid, segX, segZ);
-  const maxVal = Math.max(...smoothed, 0.001);
+  const maxVal = Math.max(smoothed.reduce((m, v) => v > m ? v : m, 0), 0.001);
   for (let i = 0; i < smoothed.length; i++) smoothed[i] /= maxVal;
 
   const worldD = segZ * (24 / Math.max(segZ, 1));
@@ -273,11 +273,21 @@ export function ConversationTerrain({
       const st = stateRef.current;
       if (!st) return;
 
-      // Clear old terrain objects
-      if (st.terrainMesh) { scene.remove(st.terrainMesh); st.terrainMesh = null; }
-      if (st.contourGroup) { scene.remove(st.contourGroup); st.contourGroup = null; }
-      if (st.markerGroup) { scene.remove(st.markerGroup); st.markerGroup = null; }
-      if (st.axisGroup) { scene.remove(st.axisGroup); st.axisGroup = null; }
+      // Clear old terrain objects — dispose GPU resources to prevent memory leaks
+      const disposeObject = (obj: THREE.Object3D) => {
+        obj.traverse((child) => {
+          if ((child as THREE.Mesh).geometry) (child as THREE.Mesh).geometry.dispose();
+          const mat = (child as THREE.Mesh).material;
+          if (mat) {
+            if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+            else (mat as THREE.Material).dispose();
+          }
+        });
+      };
+      if (st.terrainMesh) { disposeObject(st.terrainMesh); scene.remove(st.terrainMesh); st.terrainMesh = null; }
+      if (st.contourGroup) { disposeObject(st.contourGroup); scene.remove(st.contourGroup); st.contourGroup = null; }
+      if (st.markerGroup) { disposeObject(st.markerGroup); scene.remove(st.markerGroup); st.markerGroup = null; }
+      if (st.axisGroup) { disposeObject(st.axisGroup); scene.remove(st.axisGroup); st.axisGroup = null; }
 
       if (data.length < 2) return;
 

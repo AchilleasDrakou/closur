@@ -327,16 +327,23 @@ function ReviewView({ session, onBack }: { session: SessionData | null; onBack: 
   }, [exportText]);
 
   const openInClaude = useCallback(() => {
+    // Truncate to ~6KB to stay within URL limits
+    const truncated = exportText.slice(0, 6000);
+    const suffix = exportText.length > 6000 ? "\n\n[Transcript truncated — paste full version from clipboard]" : "";
     const prompt = encodeURIComponent(
-      `I just had a practice conversation. Here's the transcript and coaching notes. Give me specific feedback on how to improve:\n\n${exportText}`
+      `I just had a practice conversation. Give me specific feedback on how to improve:\n\n${truncated}${suffix}`
     );
+    navigator.clipboard.writeText(exportText); // full version on clipboard
     window.open(`https://claude.ai/new?q=${prompt}`, "_blank");
   }, [exportText]);
 
   const openInChatGPT = useCallback(() => {
+    const truncated = exportText.slice(0, 6000);
+    const suffix = exportText.length > 6000 ? "\n\n[Transcript truncated — paste full version from clipboard]" : "";
     const prompt = encodeURIComponent(
-      `I just had a practice conversation. Here's the transcript and coaching notes. Give me specific feedback on how to improve:\n\n${exportText}`
+      `I just had a practice conversation. Give me specific feedback on how to improve:\n\n${truncated}${suffix}`
     );
+    navigator.clipboard.writeText(exportText);
     window.open(`https://chatgpt.com/?q=${prompt}`, "_blank");
   }, [exportText]);
 

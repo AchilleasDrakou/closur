@@ -274,8 +274,28 @@ api.get("/api/scenarios/:id", (c) => {
 
 // Scrape product URL
 api.post("/api/scrape", async (c) => {
-  const { url } = await c.req.json<{ url: string }>();
+  let body: { url?: string };
+  try {
+    body = await c.req.json<{ url: string }>();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  const { url } = body;
   if (!url) return c.json({ error: "URL required" }, 400);
+
+  // SSRF protection: only allow https, block private/reserved IPs
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return c.json({ error: "HTTPS URLs only" }, 400);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host.startsWith("127.") || host.startsWith("10.") ||
+        host.startsWith("192.168.") || host.startsWith("172.") || host === "169.254.169.254" ||
+        host.endsWith(".internal") || host.endsWith(".local")) {
+      return c.json({ error: "Private/reserved hosts not allowed" }, 400);
+    }
+  } catch {
+    return c.json({ error: "Invalid URL" }, 400);
+  }
 
   try {
     // Use CF Browser Rendering to get markdown

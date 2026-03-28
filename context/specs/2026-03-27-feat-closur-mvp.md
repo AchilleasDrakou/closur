@@ -16,39 +16,39 @@ Modular conversation engine on Cloudflare + ElevenLabs. Scenario-driven practice
 ## Acceptance Criteria
 
 ### Day 1: Scaffold + Onboarding
-- [ ] Hono Worker project scaffolded with wrangler.toml (Workers AI, KV, DO bindings)
-- [ ] React + Vite + Tailwind frontend shell deployed to CF Pages
-- [ ] Browser Rendering /markdown endpoint working (paste URL → get markdown)
-- [ ] Workers AI summarizes product markdown into structured profile
-- [ ] Product profile stored in KV
-- [ ] Scenario configs (JSON) stored in KV (sales pitch, VC pitch, firing, conflict, negotiation)
-- [ ] Basic UI: onboarding flow + scenario picker
+- [x] Hono Worker project scaffolded with wrangler.toml (Workers AI, KV, DO bindings)
+- [x] React + Vite + Tailwind frontend shell deployed to CF Pages
+- [x] Browser Rendering /markdown endpoint working (paste URL → get markdown)
+- [x] Workers AI summarizes product markdown into structured profile
+- [x] Product profile stored in KV
+- [x] Scenario configs (JSON) stored in KV (sales pitch, VC pitch, firing, conflict, negotiation)
+- [x] Basic UI: onboarding flow + scenario picker
 
 ### Day 2: Practice Arena Core
-- [ ] CoachAgent Durable Object with SQLite session storage
-- [ ] ElevenLabs Conversational AI integration (WebSocket from browser)
-- [ ] Workers AI configured as LLM backend for ElevenLabs agent
-- [ ] Scenario config injects persona/context into ElevenLabs agent system prompt
-- [ ] End-to-end voice loop working: speak → AI responds → speak
-- [ ] user_transcript events captured and stored in DO
+- [x] CoachAgent Durable Object with SQLite session storage
+- [x] ElevenLabs Conversational AI integration (WebSocket from browser)
+- [ ] Workers AI configured as LLM backend for ElevenLabs agent (needs ElevenLabs agent setup)
+- [x] Scenario config injects persona/context into ElevenLabs agent system prompt
+- [ ] End-to-end voice loop working: speak → AI responds → speak (needs API key)
+- [x] user_transcript events captured and stored in DO
 
 ### Day 3: Feedback + Emotions
-- [ ] Web Audio API module: mic stream fork → AnalyserNode → pitch, energy, pace, pauses
-- [ ] Acoustic data sent to CoachAgent DO via WebSocket
-- [ ] Workers AI sentiment analysis on user_transcript chunks
-- [ ] Nudge engine: aggregates acoustic + sentiment + scenario rubric → generates coaching tips
-- [ ] On-screen guidance overlay (floating cards, color-coded by urgency)
-- [ ] Post-session scorecard generation (Workers AI summarization)
+- [x] Web Audio API module: mic stream fork → AnalyserNode → pitch, energy, pace, pauses
+- [x] Acoustic data sent to CoachAgent DO via WebSocket
+- [x] Workers AI sentiment analysis on user_transcript chunks
+- [x] Nudge engine: aggregates acoustic + sentiment + scenario rubric → generates coaching tips
+- [x] On-screen guidance overlay (floating cards, color-coded by urgency)
+- [x] Post-session scorecard generation (Workers AI summarization)
 
 ### Day 4: 3D Viz + Polish
-- [ ] Three.js terrain visualization ported from session-dashboard
-- [ ] Viz Mode A: multi-dimensional (sentiment + pace + energy over time)
-- [ ] Viz Mode B: topic clusters on Z-axis
-- [ ] Live data feed during practice session
-- [ ] Historic replay for past sessions
-- [ ] Session history sidebar
-- [ ] Session export: markdown copy, "Open in Claude", "Open in ChatGPT"
-- [ ] Landing page with hero tagline
+- [x] Three.js terrain visualization ported from session-dashboard
+- [x] Viz Mode A: multi-dimensional (sentiment + pace + energy over time)
+- [x] Viz Mode B: topic clusters on Z-axis
+- [x] Live data feed during practice session
+- [ ] Historic replay for past sessions (terrain component supports it, needs wiring in review view)
+- [x] Session history sidebar
+- [x] Session export: markdown copy, "Open in Claude", "Open in ChatGPT"
+- [x] Landing page with hero tagline
 
 ### Day 5: Video + Social
 - [ ] Demo video recorded (60-75s)
