@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
+import { useAgent } from "agents/react";
 
 interface Scenario {
   id: string;
@@ -47,6 +48,24 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
   const audioContextRef = useRef<AudioContext | null>(null);
   const animFrameRef = useRef<number>(0);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const acousticSendInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastAcousticRef = useRef<AcousticData | null>(null);
+
+  // Connect to CoachAgent DO
+  const agent = useAgent({
+    agent: "CoachAgent",
+    onMessage: (message: unknown) => {
+      try {
+        const msg = typeof message === "string" ? JSON.parse(message) : (message as { data?: string });
+        const data = typeof msg.data === "string" ? JSON.parse(msg.data) : msg;
+        if (data.type === "nudge" && data.nudge) {
+          addNudge(data.nudge.text, data.nudge.urgency);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    },
+  });
 
   // ElevenLabs Conversational AI hook
   const conversation = useConversation({
@@ -61,6 +80,10 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
       const now = Date.now();
       if (message.source === "user") {
         setTranscript((prev) => [...prev, { role: "user", text: message.message, timestamp: now }]);
+        // Analyze user speech for coaching nudges
+        if (message.message.trim().length > 10) {
+          agent.call("analyzeTranscript", [message.message]).catch(console.error);
+        }
       } else if (message.source === "ai") {
         setTranscript((prev) => [...prev, { role: "agent", text: message.message, timestamp: now }]);
       }
@@ -149,6 +172,7 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
         };
 
         setAcousticData((prev) => [...prev, data]);
+        lastAcousticRef.current = data;
 
         animFrameRef.current = requestAnimationFrame(analyze);
       };
@@ -185,12 +209,22 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
     setAcousticData([]);
     setNudges([]);
 
+    // Set scenario on the CoachAgent
+    agent.call("setScenario", [scenario]).catch(console.error);
+
     // Start audio analysis
     await startAudioAnalysis();
 
+    // Periodically send acoustic data to the agent (every 2s)
+    acousticSendInterval.current = setInterval(() => {
+      const latest = lastAcousticRef.current;
+      if (latest) {
+        agent.call("sendAcousticData", [latest]).catch(console.error);
+      }
+    }, 2000);
+
     // Start ElevenLabs conversation
     try {
-      // Try signed URL first, fallback to agentId
       const res = await fetch("/api/signed-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -209,12 +243,16 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
       console.error("Failed to start ElevenLabs session:", err);
       addNudge("Failed to connect to voice agent.", "warning");
     }
-  }, [scenario, conversation, startAudioAnalysis, addNudge]);
+  }, [scenario, conversation, startAudioAnalysis, addNudge, agent]);
 
   // End session
   const endSession = useCallback(async () => {
     await conversation.endSession();
     stopAudioAnalysis();
+    if (acousticSendInterval.current) {
+      clearInterval(acousticSendInterval.current);
+      acousticSendInterval.current = null;
+    }
 
     const duration = Date.now() - startTimeRef.current;
     setIsActive(false);
@@ -231,6 +269,9 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
   useEffect(() => {
     return () => {
       stopAudioAnalysis();
+      if (acousticSendInterval.current) {
+        clearInterval(acousticSendInterval.current);
+      }
     };
   }, [stopAudioAnalysis]);
 

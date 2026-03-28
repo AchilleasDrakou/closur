@@ -458,3 +458,153 @@ body {
   background: var(--bg);
   border: 1px solid var(--border);
 }
+
+/* ─── Landing page ─── */
+
+.landing {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.landing-content {
+  position: relative;
+  max-width: 560px;
+  text-align: center;
+  padding: 64px 48px;
+}
+
+.landing-bracket {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+}
+
+.landing-bracket-tl {
+  top: 0;
+  left: 0;
+  border-top: 2px solid var(--green);
+  border-left: 2px solid var(--green);
+}
+
+.landing-bracket-br {
+  bottom: 0;
+  right: 0;
+  border-bottom: 2px solid var(--green);
+  border-right: 2px solid var(--green);
+}
+
+.landing-title {
+  font-family: var(--sans);
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: var(--green);
+  margin-bottom: 16px;
+}
+
+.landing-tagline {
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--text);
+  line-height: 1.6;
+  margin-bottom: 40px;
+  font-style: italic;
+}
+
+.landing-features {
+  list-style: none;
+  text-align: left;
+  margin-bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.landing-features li {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  line-height: 1.5;
+}
+
+.landing-bullet {
+  color: var(--green);
+  margin-right: 10px;
+  font-weight: 700;
+}
+
+.landing-cta {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  background: var(--green);
+  color: var(--bg);
+  border: none;
+  padding: 16px 48px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.landing-cta:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+/* ─── Session history cards ─── */
+
+.history-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-card);
+  border: none;
+  border-left: 3px solid var(--green);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  font-family: var(--mono);
+  transition: all 0.15s;
+}
+
+.history-card:hover {
+  background: #14141a;
+  border-left-color: var(--green);
+}
+
+.history-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green);
+  font-family: var(--sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.history-card-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.history-card-badges {
+  display: flex;
+  gap: 6px;
+}
+
+.history-badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-bright);
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}

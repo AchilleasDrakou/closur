@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAgent } from "agents/react";
 import { PracticeArena, type SessionData } from "./components/PracticeArena";
 
@@ -14,18 +14,43 @@ interface Scenario {
   scoring: string[];
 }
 
-type View = "onboarding" | "scenarios" | "practice" | "review";
+interface SavedSession {
+  id: string;
+  scenarioName: string;
+  date: string;
+  duration: number;
+  avgEnergy: number;
+  data: SessionData;
+}
+
+type View = "landing" | "onboarding" | "scenarios" | "practice" | "review";
+
+// ── localStorage helpers ─────────────────────────────────────────────
+
+const SESSIONS_KEY = "closur_sessions";
+
+function loadSessions(): SavedSession[] {
+  try {
+    const raw = localStorage.getItem(SESSIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveSessions(sessions: SavedSession[]) {
+  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+}
 
 // ── App ───────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [view, setView] = useState<View>("scenarios");
+  const [view, setView] = useState<View>("landing");
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [productUrl, setProductUrl] = useState("");
   const [productProfile, setProductProfile] = useState<Record<string, unknown> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lastSession, setLastSession] = useState<SessionData | null>(null);
+  const [savedSessions, setSavedSessions] = useState<SavedSession[]>(loadSessions);
 
   // Connect to CoachAgent DO
   const agent = useAgent({ agent: "CoachAgent" });
@@ -61,17 +86,46 @@ export default function App() {
     setView("practice");
   }, []);
 
+  // Save completed session
+  const saveSession = useCallback((data: SessionData, scenarioName: string) => {
+    const avgEnergy = data.acousticData.length > 0
+      ? data.acousticData.reduce((s, d) => s + d.energy, 0) / data.acousticData.length
+      : 0;
+    const session: SavedSession = {
+      id: Date.now().toString(36),
+      scenarioName,
+      date: new Date().toISOString(),
+      duration: data.duration,
+      avgEnergy,
+      data,
+    };
+    const updated = [session, ...savedSessions];
+    setSavedSessions(updated);
+    saveSessions(updated);
+  }, [savedSessions]);
+
+  // View a saved session
+  const viewSession = useCallback((session: SavedSession) => {
+    setLastSession(session.data);
+    setView("review");
+  }, []);
+
   // Load scenarios on mount
-  useState(() => {
+  useEffect(() => {
     loadScenarios();
-  });
+  }, [loadScenarios]);
+
+  // Landing page
+  if (view === "landing") {
+    return <LandingView onStart={() => setView("scenarios")} />;
+  }
 
   return (
     <div className="app">
       {/* Top bar */}
       <header className="top-bar">
         <div className="top-bar-left">
-          <span className="logo">CLOSUR</span>
+          <span className="logo" onClick={() => setView("landing")} style={{ cursor: "pointer" }}>CLOSUR</span>
           <span className="tagline">the life you want is on the other side of a few hard conversations</span>
         </div>
         <nav className="top-bar-nav">
@@ -90,7 +144,28 @@ export default function App() {
         <aside className="sidebar">
           <div className="panel-header">SESSION HISTORY</div>
           <div className="session-list">
-            <div className="empty-state">No sessions yet. Pick a scenario and start practicing.</div>
+            {savedSessions.length === 0 ? (
+              <div className="empty-state">No sessions yet. Pick a scenario and start practicing.</div>
+            ) : (
+              savedSessions.map((s) => {
+                const dur = Math.round(s.duration / 1000);
+                const mins = Math.floor(dur / 60);
+                const secs = dur % 60;
+                const d = new Date(s.date);
+                return (
+                  <button key={s.id} className="history-card" onClick={() => viewSession(s)}>
+                    <div className="history-card-title">{s.scenarioName}</div>
+                    <div className="history-card-meta">
+                      <span>{d.toLocaleDateString()} {d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span>{mins}m {secs}s</span>
+                    </div>
+                    <div className="history-card-badges">
+                      <span className="history-badge">{(s.avgEnergy * 100).toFixed(0)}% energy</span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
         </aside>
 
@@ -115,6 +190,7 @@ export default function App() {
             <PracticeArena
               scenario={selectedScenario}
               onEnd={(data) => {
+                saveSession(data, selectedScenario.name);
                 setLastSession(data);
                 setView("review");
               }}
@@ -125,6 +201,27 @@ export default function App() {
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+// ── Landing View ─────────────────────────────────────────────────────
+
+function LandingView({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="landing">
+      <div className="landing-content">
+        <div className="landing-bracket landing-bracket-tl" />
+        <div className="landing-bracket landing-bracket-br" />
+        <h1 className="landing-title">CLOSUR</h1>
+        <p className="landing-tagline">The life you want is on the other side of a few hard conversations.</p>
+        <ul className="landing-features">
+          <li><span className="landing-bullet">&rsaquo;</span> Practice tough conversations with an AI counterpart</li>
+          <li><span className="landing-bullet">&rsaquo;</span> Get real-time coaching on tone, energy, and delivery</li>
+          <li><span className="landing-bullet">&rsaquo;</span> Review transcripts and track your progress over time</li>
+        </ul>
+        <button className="landing-cta" onClick={onStart}>START PRACTICING</button>
+      </div>
     </div>
   );
 }

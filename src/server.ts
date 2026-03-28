@@ -3,6 +3,13 @@ import { routeAgentRequest, callable } from "agents";
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { Hono } from "hono";
 import { generateText } from "ai";
+import {
+  analyzeTranscriptWithAI,
+  checkAcousticNudges,
+  type ConversationState,
+  type AcousticSnapshot,
+  type NudgeResult,
+} from "./lib/nudge-engine";
 
 // ── Scenario type ─────────────────────────────────────────────────────
 
@@ -72,7 +79,32 @@ export const DEFAULT_SCENARIOS: Scenario[] = [
 export class CoachAgent extends AIChatAgent<Env> {
   maxPersistedMessages = 200;
 
-  // Store acoustic data from client
+  // Conversation state tracked across the session
+  private convState: ConversationState = {
+    turnCount: 0,
+    topicsCovered: [],
+    objectivesHit: [],
+    lastAnalysis: null,
+    recentAcoustic: [],
+  };
+
+  private activeScenario: Scenario | null = null;
+  private lastAcousticNudgeTime = 0;
+
+  // Set scenario for this session
+  @callable()
+  async setScenario(scenario: Scenario) {
+    this.activeScenario = scenario;
+    this.convState = {
+      turnCount: 0,
+      topicsCovered: [],
+      objectivesHit: [],
+      lastAnalysis: null,
+      recentAcoustic: [],
+    };
+  }
+
+  // Store acoustic data + check thresholds for nudges
   @callable()
   async sendAcousticData(data: {
     pitch: number;
@@ -80,7 +112,6 @@ export class CoachAgent extends AIChatAgent<Env> {
     pace: number;
     timestamp: number;
   }) {
-    // Store in SQL for viz and analysis
     this.sql.exec(
       `INSERT OR IGNORE INTO acoustic_data (timestamp, pitch, energy, pace) VALUES (?, ?, ?, ?)`,
       data.timestamp,
@@ -89,16 +120,36 @@ export class CoachAgent extends AIChatAgent<Env> {
       data.pace,
     );
 
-    // Broadcast viz data to connected clients
-    this.broadcast(
-      JSON.stringify({
-        type: "viz-data",
-        data,
-      }),
-    );
+    // Track recent acoustic data
+    const snapshot: AcousticSnapshot = { pitch: data.pitch, energy: data.energy, pace: data.pace };
+    this.convState.recentAcoustic.push(snapshot);
+    if (this.convState.recentAcoustic.length > 30) {
+      this.convState.recentAcoustic = this.convState.recentAcoustic.slice(-30);
+    }
+
+    // Broadcast viz data
+    this.broadcast(JSON.stringify({ type: "viz-data", data }));
+
+    // Check acoustic thresholds (throttle to every 5s)
+    const now = Date.now();
+    if (now - this.lastAcousticNudgeTime > 5000) {
+      // Average recent acoustic data for smoother nudges
+      const recent = this.convState.recentAcoustic.slice(-10);
+      const avg: AcousticSnapshot = {
+        pitch: recent.reduce((s, d) => s + d.pitch, 0) / recent.length,
+        energy: recent.reduce((s, d) => s + d.energy, 0) / recent.length,
+        pace: recent.reduce((s, d) => s + d.pace, 0) / recent.length,
+      };
+
+      const nudges = checkAcousticNudges(avg);
+      for (const nudge of nudges) {
+        this.emitNudge(nudge);
+      }
+      if (nudges.length > 0) this.lastAcousticNudgeTime = now;
+    }
   }
 
-  // Store a coaching nudge
+  // Store and broadcast a nudge
   @callable()
   async sendNudge(nudge: { text: string; urgency: "info" | "warning" | "positive"; timestamp: number }) {
     this.sql.exec(
@@ -107,33 +158,41 @@ export class CoachAgent extends AIChatAgent<Env> {
       nudge.text,
       nudge.urgency,
     );
-
-    this.broadcast(
-      JSON.stringify({
-        type: "nudge",
-        nudge,
-      }),
-    );
+    this.broadcast(JSON.stringify({ type: "nudge", nudge }));
   }
 
-  // Analyze transcript chunk for sentiment
+  // Analyze transcript and generate nudges
   @callable()
   async analyzeTranscript(text: string) {
-    const workersai = createWorkersAI({ binding: this.env.AI });
+    this.convState.turnCount++;
 
-    const result = await generateText({
-      model: workersai("@cf/meta/llama-3.1-8b-instruct"),
-      system: `You analyze speech transcripts for a conversation coach. Return JSON only.
-Evaluate: confidence (0-1), hedging (0-1), filler_words (count), assertiveness (0-1), key_topics (array of strings).
-Be concise.`,
-      prompt: text,
-    });
+    if (!this.activeScenario) {
+      // No scenario set — do basic analysis only
+      return { confidence: 0.5, hedging: 0.5, key_topics: [] };
+    }
 
-    let analysis;
-    try {
-      analysis = JSON.parse(result.text);
-    } catch {
-      analysis = { confidence: 0.5, hedging: 0.5, filler_words: 0, assertiveness: 0.5, key_topics: [] };
+    const { analysis, nudges } = await analyzeTranscriptWithAI(
+      this.env.AI,
+      text,
+      {
+        objectives: this.activeScenario.objectives,
+        scoring: this.activeScenario.scoring,
+        name: this.activeScenario.name,
+      },
+      this.convState,
+    );
+
+    // Update conversation state
+    this.convState.lastAnalysis = analysis;
+    for (const topic of analysis.key_topics) {
+      if (!this.convState.topicsCovered.includes(topic)) {
+        this.convState.topicsCovered.push(topic);
+      }
+    }
+
+    // Emit nudges
+    for (const nudge of nudges) {
+      this.emitNudge(nudge);
     }
 
     return analysis;
@@ -149,10 +208,27 @@ Be concise.`,
       acousticData: acousticRows,
       nudges: nudgeRows,
       messageCount: this.messages.length,
+      conversationState: this.convState,
     };
   }
 
-  // Initialize tables on start
+  // Helper: emit a nudge (persist + broadcast)
+  private emitNudge(nudge: NudgeResult) {
+    const now = Date.now();
+    this.sql.exec(
+      `INSERT INTO nudges (timestamp, text, urgency) VALUES (?, ?, ?)`,
+      now,
+      nudge.text,
+      nudge.urgency,
+    );
+    this.broadcast(
+      JSON.stringify({
+        type: "nudge",
+        nudge: { ...nudge, timestamp: now },
+      }),
+    );
+  }
+
   onStart() {
     this.sql.exec(`
       CREATE TABLE IF NOT EXISTS acoustic_data (
@@ -172,10 +248,7 @@ Be concise.`,
     `);
   }
 
-  // Main chat handler — not used for voice but for text-based interactions
   async onChatMessage() {
-    // Placeholder — voice conversations go through ElevenLabs Conversational AI directly
-    // This handles any text-based coaching interactions
     return new Response("OK");
   }
 }
