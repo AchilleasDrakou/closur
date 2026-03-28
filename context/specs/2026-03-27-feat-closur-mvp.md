@@ -81,6 +81,10 @@ Modular conversation engine on Cloudflare + ElevenLabs. Scenario-driven practice
 - Browser — manages ElevenLabs WebSocket + Web Audio API + Three.js rendering
 - All storage on Cloudflare (DO SQLite + KV)
 
+## Feedback
+Rating: 4/5
+Minor friction: ElevenLabs emotion detection assumption was wrong (no real-time emotion API exists). Had to build client-side Web Audio + Workers AI sentiment hybrid. Added ~half day of research but resulted in a better architecture.
+
 ## References
 - docs/plans/2026-03-26-sales-coach-design.md
 - docs/brand-guidelines.md
