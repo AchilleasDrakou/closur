@@ -333,6 +333,13 @@ function ReviewView({ session, onBack }: { session: SessionData | null; onBack: 
     window.open(`https://claude.ai/new?q=${prompt}`, "_blank");
   }, [exportText]);
 
+  const openInChatGPT = useCallback(() => {
+    const prompt = encodeURIComponent(
+      `I just had a practice conversation. Here's the transcript and coaching notes. Give me specific feedback on how to improve:\n\n${exportText}`
+    );
+    window.open(`https://chatgpt.com/?q=${prompt}`, "_blank");
+  }, [exportText]);
+
   if (!session) {
     return (
       <div className="review-view">
@@ -388,6 +395,7 @@ function ReviewView({ session, onBack }: { session: SessionData | null; onBack: 
             <>
               <button className="export-btn" onClick={copyToClipboard}>COPY</button>
               <button className="export-btn export-claude" onClick={openInClaude}>OPEN IN CLAUDE</button>
+              <button className="export-btn" onClick={openInChatGPT}>OPEN IN CHATGPT</button>
             </>
           )}
         </div>

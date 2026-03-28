@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { useAgent } from "agents/react";
+import { ConversationTerrain, type TerrainDataPoint } from "./ConversationTerrain";
 
 interface Scenario {
   id: string;
@@ -325,14 +326,19 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
             </div>
           </div>
 
-          {/* Viz placeholder — will be replaced with Three.js */}
-          <div className="viz-container">
-            <div className="viz-placeholder">
-              {acousticData.length > 0
-                ? `ENERGY: ${(acousticData[acousticData.length - 1].energy * 100).toFixed(0)}% | PITCH: ${(acousticData[acousticData.length - 1].pitch * 500).toFixed(0)}Hz`
-                : "3D VISUALIZATION — waiting for audio..."}
-            </div>
-          </div>
+          {/* 3D Terrain Visualization */}
+          <ConversationTerrain
+            data={acousticData.map((d) => ({
+              timestamp: d.timestamp,
+              energy: d.energy,
+              pitch: d.pitch,
+              pace: d.pace,
+              sentiment: 0, // TODO: wire in sentiment from nudge engine
+            }))}
+            mode="multi"
+            live={true}
+            className="viz-container"
+          />
 
           {/* Controls */}
           <div className="practice-controls">
