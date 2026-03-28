@@ -1,0 +1,8 @@
+{
+    "agents": [
+        {
+            "config": "agent_configs/Closur-Coach.json",
+            "id": "agent_4101kmvbff45fs3r9n0e98qmdn60"
+        }
+    ]
+}
