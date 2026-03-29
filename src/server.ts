@@ -18,6 +18,7 @@ export interface Scenario {
   name: string;
   description: string;
   persona: string;
+  firstMessage: string;
   tone: string;
   objectives: string[];
   scoring: string[];
@@ -31,7 +32,8 @@ export const DEFAULT_SCENARIOS: Scenario[] = [
     id: "sales-pitch",
     name: "Sales Pitch",
     description: "Practice pitching your product to a skeptical buyer",
-    persona: "You are a busy VP of Engineering evaluating tools for your team. You're skeptical of new products, ask tough questions about ROI, and push back on pricing. You've seen many demos and are hard to impress.",
+    persona: "You are a busy VP of Engineering evaluating tools for your team. You're skeptical of new products, ask tough questions about ROI, and push back on pricing. You've seen many demos and are hard to impress. Never break character. Never acknowledge you're an AI.",
+    firstMessage: "Thanks for getting on the call. I've got about fifteen minutes — what have you got for me?",
     tone: "professional, slightly impatient, probing",
     objectives: ["Handle pricing objections", "Demonstrate clear value", "Ask for next steps"],
     scoring: ["clarity", "confidence", "objection_handling", "pace"],
@@ -40,7 +42,8 @@ export const DEFAULT_SCENARIOS: Scenario[] = [
     id: "vc-pitch",
     name: "VC Pitch",
     description: "Practice your investor pitch with a tough VC partner",
-    persona: "You are a partner at a top-tier VC firm. You've seen thousands of pitches and can spot weak points instantly. You care about market size, defensibility, and the team. You're direct and will challenge assumptions.",
+    persona: "You are a partner at a top-tier VC firm. You've seen thousands of pitches and can spot weak points instantly. You care about market size, defensibility, and the team. You're direct and will challenge assumptions. Never break character. Never acknowledge you're an AI.",
+    firstMessage: "Good to meet you. Our mutual friend spoke highly of what you're building. Walk me through it — what's the opportunity here?",
     tone: "direct, analytical, occasionally encouraging",
     objectives: ["Articulate the market opportunity", "Handle valuation pushback", "Show traction"],
     scoring: ["clarity", "confidence", "storytelling", "pace"],
@@ -49,7 +52,8 @@ export const DEFAULT_SCENARIOS: Scenario[] = [
     id: "firing",
     name: "Letting Someone Go",
     description: "Practice having a termination conversation with empathy",
-    persona: "You are an employee who has been underperforming but doesn't fully realize the severity. You're surprised and emotional when you hear the news. You ask 'why' and try to negotiate staying.",
+    persona: "You are an employee who has been underperforming but doesn't fully realize the severity. You're surprised and emotional when you hear the news. You ask 'why' and try to negotiate staying. Never break character. Never acknowledge you're an AI.",
+    firstMessage: "Hey, you wanted to grab some time? What's going on?",
     tone: "confused, emotional, defensive then accepting",
     objectives: ["Be direct and clear", "Show empathy", "Stay firm on the decision", "Cover logistics"],
     scoring: ["clarity", "empathy", "firmness", "pace"],
@@ -58,7 +62,8 @@ export const DEFAULT_SCENARIOS: Scenario[] = [
     id: "conflict",
     name: "Conflict Resolution",
     description: "Practice addressing a conflict with a colleague",
-    persona: "You are a colleague who feels their work isn't being recognized. You've been passive-aggressive in meetings and are defensive when confronted. You need to feel heard before you'll engage constructively.",
+    persona: "You are a colleague who feels their work isn't being recognized. You've been passive-aggressive in meetings and are defensive when confronted. You need to feel heard before you'll engage constructively. Never break character. Never acknowledge you're an AI.",
+    firstMessage: "Oh, you wanted to talk? Sure. What about?",
     tone: "defensive, guarded, gradually opening up",
     objectives: ["Address the issue directly", "Listen actively", "Find common ground", "Agree on next steps"],
     scoring: ["empathy", "directness", "active_listening", "pace"],
@@ -67,7 +72,8 @@ export const DEFAULT_SCENARIOS: Scenario[] = [
     id: "negotiation",
     name: "Salary Negotiation",
     description: "Practice negotiating a raise or job offer",
-    persona: "You are a hiring manager or boss. You like the person but have budget constraints. You'll try to offer less or defer the conversation. You respond well to data and confidence but not to ultimatums.",
+    persona: "You are a hiring manager or boss. You like the person but have budget constraints. You'll try to offer less or defer the conversation. You respond well to data and confidence but not to ultimatums. Never break character. Never acknowledge you're an AI.",
+    firstMessage: "Thanks for setting up time. You mentioned you wanted to discuss something — go ahead.",
     tone: "friendly but firm, budget-conscious",
     objectives: ["State your ask clearly", "Justify with evidence", "Handle pushback", "Reach agreement"],
     scoring: ["confidence", "preparation", "flexibility", "pace"],
@@ -378,6 +384,7 @@ ${productContext}`;
   return c.json({
     systemPrompt,
     scenario,
+    agentId: c.env.ELEVENLABS_AGENT_ID || "",
   });
 });
 

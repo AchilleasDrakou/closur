@@ -8,6 +8,7 @@ interface Scenario {
   name: string;
   description: string;
   persona: string;
+  firstMessage: string;
   tone: string;
   objectives: string[];
   scoring: string[];
@@ -241,22 +242,30 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
       }
     }, 2000);
 
-    // Start ElevenLabs conversation
+    // Start ElevenLabs conversation with scenario-specific overrides
     try {
-      const res = await fetch("/api/signed-url", {
+      const res = await fetch("/api/agent-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenarioId: scenario.id }),
       });
       const config = await res.json();
+      const agentId = config.agentId || "";
 
-      if (config.signedUrl) {
-        await conversation.startSession({ signedUrl: config.signedUrl });
-      } else if (config.agentId) {
-        await conversation.startSession({ agentId: config.agentId });
-      } else {
+      if (!agentId) {
         addNudge("No ElevenLabs agent configured. Set ELEVENLABS_AGENT_ID.", "warning");
+        return;
       }
+
+      await conversation.startSession({
+        agentId,
+        overrides: {
+          agent: {
+            prompt: { prompt: config.systemPrompt },
+            firstMessage: scenario.firstMessage,
+          },
+        },
+      });
     } catch (err) {
       console.error("Failed to start ElevenLabs session:", err);
       addNudge("Failed to connect to voice agent.", "warning");
@@ -321,7 +330,7 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
         </div>
       ) : (
         <div className="practice-active">
-          {/* Nudge overlay */}
+          {/* Nudge overlay — floats over terrain */}
           <div className="nudge-overlay">
             {nudges.map((n, i) => (
               <div key={`${n.timestamp}-${i}`} className={`nudge nudge-${n.urgency}`}>
@@ -330,38 +339,40 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
             ))}
           </div>
 
-          {/* Live transcript */}
-          <div className="live-transcript">
-            <div className="panel-header">TRANSCRIPT</div>
-            <div className="transcript-scroll">
-              {transcript.map((t, i) => (
-                <div key={i} className={`transcript-line transcript-${t.role}`}>
-                  <span className="transcript-role">{t.role === "user" ? "YOU" : "THEM"}</span>
-                  <span className="transcript-text">{t.text}</span>
-                </div>
-              ))}
-            </div>
+          {/* 3D Terrain — hero element, fills most of the view */}
+          <div className="terrain-hero">
+            <ConversationTerrain
+              data={acousticData.map((d) => ({
+                timestamp: d.timestamp,
+                energy: d.energy,
+                pitch: d.pitch,
+                pace: d.pace,
+                sentiment: 0,
+              }))}
+              mode="multi"
+              live={true}
+              className="terrain-canvas"
+            />
           </div>
 
-          {/* 3D Terrain Visualization */}
-          <ConversationTerrain
-            data={acousticData.map((d) => ({
-              timestamp: d.timestamp,
-              energy: d.energy,
-              pitch: d.pitch,
-              pace: d.pace,
-              sentiment: 0, // TODO: wire in sentiment from nudge engine
-            }))}
-            mode="multi"
-            live={true}
-            className="viz-container"
-          />
-
-          {/* Controls */}
-          <div className="practice-controls">
-            <button className="end-btn" onClick={endSession}>
-              END SESSION
-            </button>
+          {/* Bottom bar: compact transcript + controls */}
+          <div className="practice-bottom">
+            <div className="compact-transcript">
+              <div className="panel-header">TRANSCRIPT</div>
+              <div className="transcript-scroll">
+                {transcript.slice(-6).map((t, i) => (
+                  <div key={i} className={`transcript-line transcript-${t.role}`}>
+                    <span className="transcript-role">{t.role === "user" ? "YOU" : "THEM"}</span>
+                    <span className="transcript-text">{t.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="practice-controls">
+              <button className="end-btn" onClick={endSession}>
+                END SESSION
+              </button>
+            </div>
           </div>
         </div>
       )}
