@@ -297,8 +297,6 @@ export function ConversationTerrain({
       const geo = new THREE.PlaneGeometry(TERRAIN_WIDTH, worldD, segX, segZ);
       geo.rotateX(-Math.PI / 2);
       const pos = geo.attributes.position;
-      const colors = new Float32Array(pos.count * 3);
-
       for (let i = 0; i < pos.count; i++) {
         const ix = Math.round((pos.getX(i) + TERRAIN_WIDTH / 2) / TERRAIN_WIDTH * segX);
         const iz = Math.round((pos.getZ(i) + worldD / 2) / worldD * segZ);
@@ -306,19 +304,12 @@ export function ConversationTerrain({
         const cz = Math.min(Math.max(iz, 0), segZ - 1);
         const h = heightfield[cz * segX + cx];
         pos.setY(i, h * HEIGHT_SCALE);
-
-        // Vertex color from sentiment
-        const sent = sentimentField[cz * segX + cx] || 0;
-        const col = sentimentToColor(sent);
-        colors[i * 3] = col.r;
-        colors[i * 3 + 1] = col.g;
-        colors[i * 3 + 2] = col.b;
       }
-      geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
       geo.computeVertexNormals();
 
+      // Dark monochromatic surface — matches session-dashboard original
       const surfaceMat = new THREE.MeshStandardMaterial({
-        vertexColors: true,
+        color: COLORS.surface,
         roughness: 0.9,
         metalness: 0.1,
         transparent: true,
@@ -334,7 +325,7 @@ export function ConversationTerrain({
       const surfStart = performance.now();
       (function fadeSurf() {
         const t = Math.min((performance.now() - surfStart) / 1500, 1);
-        surfaceMat.opacity = 0.3 * (1 - Math.pow(1 - t, 3));
+        surfaceMat.opacity = 0.25 * (1 - Math.pow(1 - t, 3));
         if (t < 1) requestAnimationFrame(fadeSurf);
       })();
 
