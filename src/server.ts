@@ -119,7 +119,7 @@ export class CoachAgent extends AIChatAgent<Env> {
     pace: number;
     timestamp: number;
   }) {
-    this.sql.exec(
+    this.ctx.storage.sql.exec(
       `INSERT OR IGNORE INTO acoustic_data (timestamp, pitch, energy, pace) VALUES (?, ?, ?, ?)`,
       data.timestamp,
       data.pitch,
@@ -159,7 +159,7 @@ export class CoachAgent extends AIChatAgent<Env> {
   // Store and broadcast a nudge
   @callable()
   async sendNudge(nudge: { text: string; urgency: "info" | "warning" | "positive"; timestamp: number }) {
-    this.sql.exec(
+    this.ctx.storage.sql.exec(
       `INSERT INTO nudges (timestamp, text, urgency) VALUES (?, ?, ?)`,
       nudge.timestamp,
       nudge.text,
@@ -208,8 +208,8 @@ export class CoachAgent extends AIChatAgent<Env> {
   // Get session summary
   @callable()
   async getSessionSummary() {
-    const acousticRows = this.sql.exec(`SELECT * FROM acoustic_data ORDER BY timestamp`).toArray();
-    const nudgeRows = this.sql.exec(`SELECT * FROM nudges ORDER BY timestamp`).toArray();
+    const acousticRows = this.ctx.storage.sql.exec(`SELECT * FROM acoustic_data ORDER BY timestamp`).toArray();
+    const nudgeRows = this.ctx.storage.sql.exec(`SELECT * FROM nudges ORDER BY timestamp`).toArray();
 
     return {
       acousticData: acousticRows,
@@ -234,7 +234,7 @@ export class CoachAgent extends AIChatAgent<Env> {
     }
 
     // Get acoustic summary
-    const acousticRows = this.sql.exec(`SELECT * FROM acoustic_data`).toArray() as Array<{ pitch: number; energy: number; pace: number }>;
+    const acousticRows = this.ctx.storage.sql.exec(`SELECT * FROM acoustic_data`).toArray() as Array<{ pitch: number; energy: number; pace: number }>;
     const acousticSummary = acousticRows.length > 0
       ? {
           avgEnergy: acousticRows.reduce((s, r) => s + r.energy, 0) / acousticRows.length,
@@ -259,7 +259,7 @@ export class CoachAgent extends AIChatAgent<Env> {
   // Helper: emit a nudge (persist + broadcast)
   private emitNudge(nudge: NudgeResult) {
     const now = Date.now();
-    this.sql.exec(
+    this.ctx.storage.sql.exec(
       `INSERT INTO nudges (timestamp, text, urgency) VALUES (?, ?, ?)`,
       now,
       nudge.text,
@@ -274,7 +274,7 @@ export class CoachAgent extends AIChatAgent<Env> {
   }
 
   onStart() {
-    this.sql.exec(`
+    this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS acoustic_data (
         timestamp INTEGER PRIMARY KEY,
         pitch REAL,
@@ -282,7 +282,7 @@ export class CoachAgent extends AIChatAgent<Env> {
         pace REAL
       )
     `);
-    this.sql.exec(`
+    this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS nudges (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp INTEGER,
