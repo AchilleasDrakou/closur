@@ -463,6 +463,166 @@ body {
   font-family: var(--sans);
 }
 
+.stat-card-hero { border: 1px solid var(--green); }
+.stat-score { font-size: 36px; }
+.stat-max { font-size: 16px; color: var(--text-dim); font-weight: 400; }
+
+/* ─── Score criteria ─── */
+
+.score-criteria {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.criteria-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.criterion-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 12px;
+}
+
+.criterion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.criterion-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-bright);
+  font-family: var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.criterion-score {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--sans);
+}
+
+.score-good { color: var(--green); }
+.score-ok { color: var(--orange); }
+.score-bad { color: var(--red); }
+
+.criterion-feedback {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* ─── Score summary ─── */
+
+.score-summary {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.summary-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+  margin-top: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-section { margin-bottom: 12px; }
+
+.summary-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--sans);
+  padding: 2px 8px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.summary-label.positive { color: var(--green); border: 1px solid var(--green); }
+.summary-label.warning { color: var(--orange); border: 1px solid var(--orange); }
+
+.score-summary ul {
+  list-style: none;
+  padding: 0;
+}
+
+.score-summary li {
+  font-size: 12px;
+  color: var(--text);
+  padding: 3px 0 3px 16px;
+  position: relative;
+}
+
+.score-summary li::before {
+  content: "›";
+  position: absolute;
+  left: 0;
+  color: var(--green);
+}
+
+/* ─── Annotations ─── */
+
+.annotations-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.annotations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.annotation {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  border-left: 3px solid;
+  background: var(--bg-panel);
+  font-size: 12px;
+}
+
+.annotation-positive { border-color: var(--green); }
+.annotation-negative { border-color: var(--red); }
+.annotation-neutral { border-color: var(--blue); }
+
+.annotation-time {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  flex-shrink: 0;
+  width: 35px;
+}
+
+.annotation-label {
+  font-weight: 600;
+  color: var(--text-bright);
+  font-family: var(--sans);
+  flex-shrink: 0;
+}
+
+.annotation-detail {
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
 /* ─── Review transcript ─── */
 
 .review-transcript {
@@ -663,3 +823,7 @@ body {
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
+
+.badge-good { border-color: var(--green); color: var(--green); }
+.badge-ok { border-color: var(--orange); color: var(--orange); }
+.badge-bad { border-color: var(--red); color: var(--red); }

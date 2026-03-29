@@ -10,6 +10,7 @@ import {
   type AcousticSnapshot,
   type NudgeResult,
 } from "./lib/nudge-engine";
+import { judgeSession, type SessionScore, type JudgeInput } from "./lib/judge";
 
 // ── Scenario type ─────────────────────────────────────────────────────
 
@@ -216,6 +217,43 @@ export class CoachAgent extends AIChatAgent<Env> {
       messageCount: this.messages.length,
       conversationState: this.convState,
     };
+  }
+
+  // Score session via LLM judge (kimi-k2.5)
+  @callable()
+  async scoreSession(transcript: JudgeInput["transcript"], duration: number): Promise<SessionScore> {
+    if (!this.activeScenario) {
+      return {
+        overall: 5,
+        criteria: [],
+        summary: "No scenario set for scoring.",
+        strengths: [],
+        improvements: [],
+        annotations: [],
+      };
+    }
+
+    // Get acoustic summary
+    const acousticRows = this.sql.exec(`SELECT * FROM acoustic_data`).toArray() as Array<{ pitch: number; energy: number; pace: number }>;
+    const acousticSummary = acousticRows.length > 0
+      ? {
+          avgEnergy: acousticRows.reduce((s, r) => s + r.energy, 0) / acousticRows.length,
+          avgPace: acousticRows.reduce((s, r) => s + r.pace, 0) / acousticRows.length,
+          avgPitch: acousticRows.reduce((s, r) => s + r.pitch, 0) / acousticRows.length,
+        }
+      : undefined;
+
+    return judgeSession(this.env.AI, {
+      scenario: {
+        name: this.activeScenario.name,
+        objectives: this.activeScenario.objectives,
+        scoring: this.activeScenario.scoring,
+        persona: this.activeScenario.persona,
+      },
+      transcript,
+      duration,
+      acousticSummary,
+    });
   }
 
   // Helper: emit a nudge (persist + broadcast)

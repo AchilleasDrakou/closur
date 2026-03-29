@@ -32,11 +32,21 @@ interface PracticeArenaProps {
   onEnd: (sessionData: SessionData) => void;
 }
 
+export interface SessionScore {
+  overall: number;
+  criteria: Array<{ name: string; score: number; feedback: string }>;
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  annotations: Array<{ timestamp: number; type: "positive" | "negative" | "neutral"; label: string; detail: string }>;
+}
+
 export interface SessionData {
   transcript: Array<{ role: "user" | "agent"; text: string; timestamp: number }>;
   acousticData: AcousticData[];
   nudges: Nudge[];
   duration: number;
+  score?: SessionScore;
 }
 
 export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
@@ -272,7 +282,7 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
     }
   }, [scenario, conversation, startAudioAnalysis, addNudge, agent]);
 
-  // End session — use refs for latest data (avoids stale closure)
+  // End session — score via LLM judge, then return
   const endSession = useCallback(async () => {
     try { await conversation.endSession(); } catch { /* already disconnected */ }
     stopAudioAnalysis();
@@ -282,15 +292,26 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
     }
 
     const duration = Date.now() - startTimeRef.current;
+    const transcript = transcriptRef.current;
     setIsActive(false);
 
+    // Score session via LLM judge
+    let score: SessionScore | undefined;
+    try {
+      addNudge("Scoring your session...", "info");
+      score = await agent.call("scoreSession", [transcript, duration]) as SessionScore;
+    } catch (err) {
+      console.error("Scoring failed:", err);
+    }
+
     onEnd({
-      transcript: transcriptRef.current,
+      transcript,
       acousticData: acousticRef.current,
       nudges: nudgesRef.current,
       duration,
+      score,
     });
-  }, [conversation, stopAudioAnalysis, onEnd]);
+  }, [conversation, stopAudioAnalysis, onEnd, agent, addNudge]);
 
   // Cleanup on unmount
   useEffect(() => {

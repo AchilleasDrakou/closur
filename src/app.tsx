@@ -20,6 +20,7 @@ interface SavedSession {
   date: string;
   duration: number;
   avgEnergy: number;
+  score?: number; // overall /10
   data: SessionData;
 }
 
@@ -97,6 +98,7 @@ export default function App() {
       date: new Date().toISOString(),
       duration: data.duration,
       avgEnergy,
+      score: data.score?.overall,
       data,
     };
     const updated = [session, ...savedSessions];
@@ -160,6 +162,9 @@ export default function App() {
                       <span>{mins}m {secs}s</span>
                     </div>
                     <div className="history-card-badges">
+                      {s.score != null && (
+                        <span className={`history-badge ${s.score >= 7 ? "badge-good" : s.score >= 4 ? "badge-ok" : "badge-bad"}`}>{s.score}/10</span>
+                      )}
                       <span className="history-badge">{(s.avgEnergy * 100).toFixed(0)}% energy</span>
                     </div>
                   </button>
@@ -359,11 +364,18 @@ function ReviewView({ session, onBack }: { session: SessionData | null; onBack: 
     );
   }
 
+  const score = session.score;
+
   return (
     <div className="review-view">
       <h2 className="view-title">SESSION REVIEW</h2>
 
+      {/* Score hero */}
       <div className="review-stats">
+        <div className="stat-card stat-card-hero">
+          <div className="stat-value stat-score">{score?.overall ?? "—"}<span className="stat-max">/10</span></div>
+          <div className="stat-label">OVERALL SCORE</div>
+        </div>
         <div className="stat-card">
           <div className="stat-value">{Math.round(session.duration / 1000)}s</div>
           <div className="stat-label">DURATION</div>
@@ -372,15 +384,61 @@ function ReviewView({ session, onBack }: { session: SessionData | null; onBack: 
           <div className="stat-value">{session.transcript.length}</div>
           <div className="stat-label">TURNS</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">
-            {session.acousticData.length > 0
-              ? (session.acousticData.reduce((s, d) => s + d.energy, 0) / session.acousticData.length * 100).toFixed(0) + "%"
-              : "—"}
-          </div>
-          <div className="stat-label">AVG ENERGY</div>
-        </div>
       </div>
+
+      {/* Criteria scores */}
+      {score && score.criteria.length > 0 && (
+        <div className="score-criteria">
+          <div className="panel-header">SCORING BREAKDOWN</div>
+          <div className="criteria-grid">
+            {score.criteria.map((c, i) => (
+              <div key={i} className="criterion-card">
+                <div className="criterion-header">
+                  <span className="criterion-name">{c.name}</span>
+                  <span className={`criterion-score ${c.score >= 7 ? "score-good" : c.score >= 4 ? "score-ok" : "score-bad"}`}>{c.score}/10</span>
+                </div>
+                <div className="criterion-feedback">{c.feedback}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Summary */}
+      {score && (
+        <div className="score-summary">
+          <div className="panel-header">ASSESSMENT</div>
+          <p className="summary-text">{score.summary}</p>
+          {score.strengths.length > 0 && (
+            <div className="summary-section">
+              <span className="summary-label positive">STRENGTHS</span>
+              <ul>{score.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
+            </div>
+          )}
+          {score.improvements.length > 0 && (
+            <div className="summary-section">
+              <span className="summary-label warning">TO IMPROVE</span>
+              <ul>{score.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Annotations timeline */}
+      {score && score.annotations.length > 0 && (
+        <div className="annotations-section">
+          <div className="panel-header">KEY MOMENTS</div>
+          <div className="annotations-list">
+            {score.annotations.map((a, i) => (
+              <div key={i} className={`annotation annotation-${a.type}`}>
+                <span className="annotation-time">{Math.round(a.timestamp / 1000)}s</span>
+                <span className="annotation-label">{a.label}</span>
+                <span className="annotation-detail">{a.detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Transcript */}
       <div className="review-transcript">
