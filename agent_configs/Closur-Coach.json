@@ -165,10 +165,10 @@
                     "text_only": true
                 },
                 "agent": {
-                    "first_message": false,
+                    "first_message": true,
                     "language": false,
                     "prompt": {
-                        "prompt": false
+                        "prompt": true
                     }
                 }
             },
