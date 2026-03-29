@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useAgent } from "agents/react";
 import { PracticeArena, type SessionData } from "./components/PracticeArena";
+import { WaveformPlayer } from "./components/WaveformPlayer";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -385,6 +386,13 @@ function ReviewView({ session, onBack }: { session: SessionData | null; onBack: 
           <div className="stat-label">TURNS</div>
         </div>
       </div>
+
+      {/* Waveform player */}
+      <WaveformPlayer
+        acousticData={session.acousticData}
+        annotations={score?.annotations ?? []}
+        duration={session.duration}
+      />
 
       {/* Criteria scores */}
       {score && score.criteria.length > 0 && (

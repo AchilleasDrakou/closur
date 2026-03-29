@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { useAgent } from "agents/react";
-import { ConversationTerrain, type TerrainDataPoint } from "./ConversationTerrain";
+import { AudioReactiveOrb } from "./AudioReactiveOrb";
+import { CircularVisualizer } from "./CircularVisualizer";
 
 interface Scenario {
   id: string;
@@ -67,6 +68,10 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
   const acousticRef = useRef<AcousticData[]>([]);
   const nudgesRef = useRef<Nudge[]>([]);
   const lastVizUpdate = useRef<number>(0);
+  const [frequencyData, setFrequencyData] = useState<Uint8Array | null>(null);
+  const [liveEnergy, setLiveEnergy] = useState(0);
+  const [livePace, setLivePace] = useState(0);
+  const [liveConfidence, setLiveConfidence] = useState(0);
 
   // Connect to CoachAgent DO
   const agent = useAgent({
@@ -201,6 +206,15 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
           setAcousticData([...acousticRef.current]);
           lastVizUpdate.current = now;
         }
+
+        // Update live metrics + frequency data for visualizers
+        setLiveEnergy(energy);
+        setLivePace(pace);
+        // Confidence: inverse of pitch variance (stable pitch = confident)
+        setLiveConfidence(Math.max(0, 1 - Math.abs(data.pitch - 0.4) * 2));
+        const freqCopy = new Uint8Array(freqArray.length);
+        freqCopy.set(freqArray);
+        setFrequencyData(freqCopy);
       };
 
       // Sample at ~10fps instead of every frame
@@ -360,20 +374,26 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
             ))}
           </div>
 
-          {/* 3D Terrain — hero element, fills most of the view */}
-          <div className="terrain-hero">
-            <ConversationTerrain
-              data={acousticData.map((d) => ({
-                timestamp: d.timestamp,
-                energy: d.energy,
-                pitch: d.pitch,
-                pace: d.pace,
-                sentiment: 0,
-              }))}
-              mode="multi"
-              live={true}
-              className="terrain-canvas"
-            />
+          {/* 3D Orb — hero element, fills most of the view */}
+          <div className="orb-hero">
+            <AudioReactiveOrb audioLevel={liveEnergy} className="orb-canvas" />
+            <CircularVisualizer frequencyData={frequencyData} className="circular-overlay" />
+          </div>
+
+          {/* Live metrics strip */}
+          <div className="metrics-strip">
+            <div className="metric-item">
+              <span className="metric-label">ENERGY</span>
+              <span className="metric-value">{Math.round(liveEnergy * 100)}%</span>
+            </div>
+            <div className="metric-item">
+              <span className="metric-label">PACE</span>
+              <span className="metric-value">{livePace < 0.3 ? "SLOW" : livePace < 0.6 ? "STEADY" : "FAST"}</span>
+            </div>
+            <div className="metric-item">
+              <span className="metric-label">CONFIDENCE</span>
+              <span className="metric-value">{Math.round(liveConfidence * 100)}%</span>
+            </div>
           </div>
 
           {/* Bottom bar: compact transcript + controls */}
