@@ -98,25 +98,36 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
     onDisconnect: () => {
       console.log("[Closur] Disconnected");
     },
-    onMessage: (message: { source: string; message: string }) => {
-      const now = Date.now();
-      if (message.source === "user") {
-        const entry = { role: "user" as const, text: message.message, timestamp: now };
-        transcriptRef.current = [...transcriptRef.current, entry];
-        setTranscript([...transcriptRef.current]);
-        // Analyze user speech for coaching nudges
-        if (message.message.trim().length > 10) {
-          agent.call("analyzeTranscript", [message.message]).catch(console.error);
+    onMessage: (message: unknown) => {
+      try {
+        const msg = message as Record<string, unknown>;
+        const source = (msg.source || msg.role || "") as string;
+        const text = (msg.message || msg.text || msg.content || "") as string;
+        if (!text) return;
+        const now = Date.now();
+        if (source === "user" || source === "human") {
+          const entry = { role: "user" as const, text, timestamp: now };
+          transcriptRef.current = [...transcriptRef.current, entry];
+          setTranscript([...transcriptRef.current]);
+          if (text.trim().length > 10) {
+            agent.call("analyzeTranscript", [text]).catch(console.error);
+          }
+        } else {
+          const entry = { role: "agent" as const, text, timestamp: now };
+          transcriptRef.current = [...transcriptRef.current, entry];
+          setTranscript([...transcriptRef.current]);
         }
-      } else if (message.source === "ai") {
-        const entry = { role: "agent" as const, text: message.message, timestamp: now };
-        transcriptRef.current = [...transcriptRef.current, entry];
-        setTranscript([...transcriptRef.current]);
-      }
+      } catch { /* ignore malformed messages */ }
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
       console.error("[Closur] ElevenLabs error:", error);
-      addNudge("Connection error. Try again.", "warning");
+      // Don't crash on error — just show a nudge
+      try {
+        const msg = error instanceof Error ? error.message : String(error);
+        addNudge(`Error: ${msg.slice(0, 80)}`, "warning");
+      } catch {
+        addNudge("Connection error.", "warning");
+      }
     },
     onModeChange: (mode: { mode: "speaking" | "listening" }) => {
       setAgentSpeaking(mode.mode === "speaking");
@@ -281,15 +292,21 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
         return;
       }
 
-      await conversation.startSession({
-        agentId,
-        overrides: {
-          agent: {
-            prompt: { prompt: config.systemPrompt },
-            firstMessage: scenario.firstMessage,
+      // Try with overrides, fallback to plain agentId if it fails
+      try {
+        await conversation.startSession({
+          agentId,
+          overrides: {
+            agent: {
+              prompt: { prompt: config.systemPrompt },
+              firstMessage: scenario.firstMessage,
+            },
           },
-        },
-      });
+        });
+      } catch (overrideErr) {
+        console.warn("Overrides failed, trying plain connection:", overrideErr);
+        await conversation.startSession({ agentId });
+      }
     } catch (err) {
       console.error("Failed to start ElevenLabs session:", err);
       addNudge("Failed to connect to voice agent.", "warning");
