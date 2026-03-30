@@ -24,7 +24,11 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: actions/setup-node@v3
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
 
-      - run: npm install
-      - run: npm run check
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run test:live-feedback-policy
+      - run: bun run replay:live-feedback

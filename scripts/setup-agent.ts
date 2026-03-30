@@ -2,7 +2,7 @@
  * Create an ElevenLabs Conversational AI agent for Closur.
  *
  * Usage:
- *   ELEVENLABS_API_KEY=your_key npx tsx scripts/setup-agent.ts
+ *   ELEVENLABS_API_KEY=your_key bun scripts/setup-agent.ts
  *
  * This creates the agent and outputs the agent ID to add to .dev.vars
  */

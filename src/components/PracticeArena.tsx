@@ -25,6 +25,10 @@ interface AcousticData {
   pitch: number;
   energy: number;
   pace: number;
+  pauseCount: number;
+  fillerCount: number;
+  transcriptChars: number;
+  utteranceDurationMs: number;
   timestamp: number;
 }
 
@@ -56,6 +60,11 @@ interface AgentConfigResponse {
   systemPrompt: string;
 }
 
+function countFillers(text: string): number {
+  const matches = text.toLowerCase().match(/\b(um|uh|like|you know|i mean|sort of|kind of)\b/g);
+  return matches?.length ?? 0;
+}
+
 export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProps) {
   const [isActive, setIsActive] = useState(false);
   const [nudges, setNudges] = useState<Nudge[]>([]);
@@ -68,6 +77,11 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const acousticSendInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastAcousticRef = useRef<AcousticData | null>(null);
+  const userVoiceActiveRef = useRef(false);
+  const utteranceStartRef = useRef<number | null>(null);
+  const lastUtteranceDurationRef = useRef(0);
+  const pauseCountRef = useRef(0);
+  const lastTranscriptMetricsRef = useRef({ fillerCount: 0, transcriptChars: 0 });
   // Refs for latest values (fixes stale closure in endSession)
   const transcriptRef = useRef<SessionData["transcript"]>([]);
   const acousticRef = useRef<AcousticData[]>([]);
@@ -94,14 +108,24 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
     },
   });
 
+  const trackClientEvent = useCallback((type: string, payload?: Record<string, unknown>) => {
+    agent.call("trackClientEvent", [{
+      type,
+      timestamp: Date.now(),
+      payload,
+    }]).catch(console.error);
+  }, [agent]);
+
   // ElevenLabs Conversational AI hook
   const conversation = useConversation({
     onConnect: () => {
       console.log("[Closur] Connected to ElevenLabs");
+      trackClientEvent("session_connected", { scenarioId: scenario.id });
       addNudge("Connected. Start speaking.", "positive");
     },
     onDisconnect: () => {
       console.log("[Closur] Disconnected");
+      trackClientEvent("session_disconnected", { scenarioId: scenario.id });
     },
     onMessage: (message: unknown) => {
       try {
@@ -114,6 +138,16 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
           const entry = { role: "user" as const, text, timestamp: now };
           transcriptRef.current = [...transcriptRef.current, entry];
           setTranscript([...transcriptRef.current]);
+          lastTranscriptMetricsRef.current = {
+            fillerCount: countFillers(text),
+            transcriptChars: text.length,
+          };
+          trackClientEvent("user_transcript_received", {
+            source,
+            length: text.length,
+            fillerCount: lastTranscriptMetricsRef.current.fillerCount,
+            text: text.slice(0, 500),
+          });
           if (text.trim().length > 10) {
             agent.call("analyzeTranscript", [text]).catch(console.error);
           }
@@ -121,6 +155,11 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
           const entry = { role: "agent" as const, text, timestamp: now };
           transcriptRef.current = [...transcriptRef.current, entry];
           setTranscript([...transcriptRef.current]);
+          trackClientEvent("agent_transcript_received", {
+            source,
+            length: text.length,
+            text: text.slice(0, 500),
+          });
         }
       } catch { /* ignore malformed messages */ }
     },
@@ -136,6 +175,10 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
     },
     onModeChange: (mode: { mode: "speaking" | "listening" }) => {
       setAgentSpeaking(mode.mode === "speaking");
+      trackClientEvent(
+        mode.mode === "speaking" ? "agent_speaking_started" : "agent_listening_started",
+        { scenarioId: scenario.id },
+      );
     },
   });
 
@@ -197,6 +240,21 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
 
         // Voice activity detection (simple threshold)
         const isVoiceActive = energy > 0.02;
+        if (isVoiceActive && !userVoiceActiveRef.current) {
+          userVoiceActiveRef.current = true;
+          utteranceStartRef.current = Date.now();
+          trackClientEvent("user_voice_started", {
+            energy,
+            pitch: Math.min(pitch / 500, 1),
+          });
+        } else if (!isVoiceActive && userVoiceActiveRef.current) {
+          userVoiceActiveRef.current = false;
+          const utteranceDurationMs = utteranceStartRef.current ? Date.now() - utteranceStartRef.current : 0;
+          utteranceStartRef.current = null;
+          lastUtteranceDurationRef.current = utteranceDurationMs;
+          pauseCountRef.current += 1;
+          trackClientEvent("user_voice_stopped", { energy, utteranceDurationMs });
+        }
         if (isVoiceActive) {
           wordCount++;
         }
@@ -209,6 +267,12 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
           pitch: Math.min(pitch / 500, 1), // normalize 0-1
           energy,
           pace,
+          pauseCount: pauseCountRef.current,
+          fillerCount: lastTranscriptMetricsRef.current.fillerCount,
+          transcriptChars: lastTranscriptMetricsRef.current.transcriptChars,
+          utteranceDurationMs: userVoiceActiveRef.current && utteranceStartRef.current
+            ? Date.now() - utteranceStartRef.current
+            : lastUtteranceDurationRef.current,
           timestamp: Date.now(),
         };
 
@@ -239,7 +303,7 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
       console.error("Failed to start audio analysis:", err);
       throw err;
     }
-  }, []);
+  }, [trackClientEvent]);
 
   const stopAudioAnalysis = useCallback(() => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -260,6 +324,15 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
     transcriptRef.current = [];
     acousticRef.current = [];
     nudgesRef.current = [];
+    userVoiceActiveRef.current = false;
+    utteranceStartRef.current = null;
+    lastUtteranceDurationRef.current = 0;
+    pauseCountRef.current = 0;
+    lastTranscriptMetricsRef.current = { fillerCount: 0, transcriptChars: 0 };
+    trackClientEvent("session_start_requested", {
+      scenarioId: scenario.id,
+      hasProductContext: Boolean(productKey),
+    });
 
     // Set scenario on the CoachAgent
     agent.call("setScenario", [scenario]).catch(console.error);
@@ -288,6 +361,7 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
       if (!agentId) {
         addNudge("No ElevenLabs agent configured. Set ELEVENLABS_AGENT_ID.", "warning");
         stopAudioAnalysis();
+        trackClientEvent("session_start_failed", { reason: "missing_agent_id" });
         return;
       }
 
@@ -307,6 +381,7 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
         await conversation.startSession({ agentId });
       }
       setIsActive(true);
+      trackClientEvent("session_started", { scenarioId: scenario.id });
     } catch (err) {
       console.error("Failed to start ElevenLabs session:", err);
       try { await conversation.endSession(); } catch { /* ignore */ }
@@ -316,9 +391,12 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
         acousticSendInterval.current = null;
       }
       setIsActive(false);
+      trackClientEvent("session_start_failed", {
+        reason: err instanceof Error ? err.message : String(err),
+      });
       addNudge("Failed to connect to voice agent.", "warning");
     }
-  }, [scenario, productKey, conversation, startAudioAnalysis, stopAudioAnalysis, addNudge, agent]);
+  }, [scenario, productKey, conversation, startAudioAnalysis, stopAudioAnalysis, addNudge, agent, trackClientEvent]);
 
   // End session — score via LLM judge, then return
   const endSession = useCallback(async () => {
@@ -332,6 +410,11 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
     const duration = Date.now() - startTimeRef.current;
     const transcript = transcriptRef.current;
     setIsActive(false);
+    trackClientEvent("session_ended", {
+      scenarioId: scenario.id,
+      duration,
+      transcriptTurns: transcript.length,
+    });
 
     // Score session via LLM judge
     let score: SessionScore | undefined;
@@ -349,7 +432,7 @@ export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProp
       duration,
       score,
     });
-  }, [conversation, stopAudioAnalysis, onEnd, agent, addNudge]);
+  }, [conversation, stopAudioAnalysis, onEnd, agent, addNudge, scenario.id, trackClientEvent]);
 
   // Cleanup on unmount
   useEffect(() => {

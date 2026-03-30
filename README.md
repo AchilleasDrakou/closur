@@ -13,8 +13,8 @@ Uses Workers AI (no API key required), with tools for weather, timezone detectio
 ```bash
 npx create-cloudflare@latest --template cloudflare/agents-starter
 cd agents-starter
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) to see your agent in action.
@@ -176,7 +176,7 @@ The starter uses [Workers AI](https://developers.cloudflare.com/workers-ai/) by 
 ### OpenAI
 
 ```bash
-npm install @ai-sdk/openai
+bun add @ai-sdk/openai
 ```
 
 ```ts
@@ -199,7 +199,7 @@ OPENAI_API_KEY=your-key-here
 ### Anthropic
 
 ```bash
-npm install @ai-sdk/anthropic
+bun add @ai-sdk/anthropic
 ```
 
 ```ts
@@ -220,7 +220,7 @@ ANTHROPIC_API_KEY=your-key-here
 ## Deploy
 
 ```bash
-npm run deploy
+bun run deploy
 ```
 
 Your agent is live on Cloudflare's global network. Messages persist in SQLite, streams resume on disconnect, and the agent hibernates when idle.
