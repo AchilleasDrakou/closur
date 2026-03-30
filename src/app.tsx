@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect } from "react";
-import { useAgent } from "agents/react";
 import { PracticeArena, type SessionData } from "./components/PracticeArena";
 import { WaveformPlayer } from "./components/WaveformPlayer";
 
@@ -10,9 +9,15 @@ interface Scenario {
   name: string;
   description: string;
   persona: string;
+  firstMessage: string;
   tone: string;
   objectives: string[];
   scoring: string[];
+}
+
+interface ProductProfileResponse {
+  profile: Record<string, unknown>;
+  key: string;
 }
 
 interface SavedSession {
@@ -50,17 +55,15 @@ export default function App() {
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [productUrl, setProductUrl] = useState("");
   const [productProfile, setProductProfile] = useState<Record<string, unknown> | null>(null);
+  const [productKey, setProductKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lastSession, setLastSession] = useState<SessionData | null>(null);
   const [savedSessions, setSavedSessions] = useState<SavedSession[]>(loadSessions);
 
-  // Connect to CoachAgent DO
-  const agent = useAgent({ agent: "CoachAgent" });
-
   // Load scenarios
   const loadScenarios = useCallback(async () => {
     const res = await fetch("/api/scenarios");
-    const data = await res.json();
+    const data = await res.json() as Scenario[];
     setScenarios(data);
   }, []);
 
@@ -74,8 +77,9 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: productUrl }),
       });
-      const data = await res.json();
+      const data = await res.json() as ProductProfileResponse;
       setProductProfile(data.profile);
+      setProductKey(data.key);
     } catch (err) {
       console.error("Scrape failed:", err);
     }
@@ -128,7 +132,7 @@ export default function App() {
       {/* Top bar */}
       <header className="top-bar">
         <div className="top-bar-left">
-          <span className="logo" onClick={() => setView("landing")} style={{ cursor: "pointer" }}>CLOSUR</span>
+          <button type="button" className="logo logo-button" onClick={() => setView("landing")}>CLOSUR</button>
           <span className="tagline">the life you want is on the other side of a few hard conversations</span>
         </div>
         <nav className="top-bar-nav">
@@ -195,6 +199,7 @@ export default function App() {
           {view === "practice" && selectedScenario && (
             <PracticeArena
               scenario={selectedScenario}
+              productKey={productKey}
               onEnd={(data) => {
                 saveSession(data, selectedScenario.name);
                 setLastSession(data);

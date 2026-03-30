@@ -30,6 +30,7 @@ interface AcousticData {
 
 interface PracticeArenaProps {
   scenario: Scenario;
+  productKey?: string | null;
   onEnd: (sessionData: SessionData) => void;
 }
 
@@ -50,11 +51,15 @@ export interface SessionData {
   score?: SessionScore;
 }
 
-export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
+interface AgentConfigResponse {
+  agentId: string;
+  systemPrompt: string;
+}
+
+export function PracticeArena({ scenario, productKey, onEnd }: PracticeArenaProps) {
   const [isActive, setIsActive] = useState(false);
   const [nudges, setNudges] = useState<Nudge[]>([]);
   const [transcript, setTranscript] = useState<SessionData["transcript"]>([]);
-  const [acousticData, setAcousticData] = useState<AcousticData[]>([]);
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const startTimeRef = useRef<number>(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -161,7 +166,6 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
       const dataArray = new Float32Array(bufferLength);
       const freqArray = new Uint8Array(bufferLength);
 
-      let lastVoiceTime = Date.now();
       let wordCount = 0;
 
       const analyze = () => {
@@ -195,7 +199,6 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
         const isVoiceActive = energy > 0.02;
         if (isVoiceActive) {
           wordCount++;
-          lastVoiceTime = Date.now();
         }
 
         // Speaking pace (approximate WPM based on voice activity bursts)
@@ -212,11 +215,7 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
         // Store in ref always (for endSession), throttle React state to 2fps for viz
         acousticRef.current = [...acousticRef.current, data];
         lastAcousticRef.current = data;
-        const now = Date.now();
-        if (now - lastVizUpdate.current > 500) {
-          setAcousticData([...acousticRef.current]);
-          lastVizUpdate.current = now;
-        }
+        lastVizUpdate.current = Date.now();
 
         // Update live metrics + frequency data for visualizers
         setLiveEnergy(energy);
@@ -238,6 +237,7 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
       sampleLoop();
     } catch (err) {
       console.error("Failed to start audio analysis:", err);
+      throw err;
     }
   }, []);
 
@@ -254,10 +254,8 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
 
   // Start session
   const startSession = useCallback(async () => {
-    setIsActive(true);
     startTimeRef.current = Date.now();
     setTranscript([]);
-    setAcousticData([]);
     setNudges([]);
     transcriptRef.current = [];
     acousticRef.current = [];
@@ -282,13 +280,14 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
       const res = await fetch("/api/agent-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenarioId: scenario.id }),
+        body: JSON.stringify({ scenarioId: scenario.id, productKey }),
       });
-      const config = await res.json();
+      const config = await res.json() as AgentConfigResponse;
       const agentId = config.agentId || "";
 
       if (!agentId) {
         addNudge("No ElevenLabs agent configured. Set ELEVENLABS_AGENT_ID.", "warning");
+        stopAudioAnalysis();
         return;
       }
 
@@ -307,11 +306,19 @@ export function PracticeArena({ scenario, onEnd }: PracticeArenaProps) {
         console.warn("Overrides failed, trying plain connection:", overrideErr);
         await conversation.startSession({ agentId });
       }
+      setIsActive(true);
     } catch (err) {
       console.error("Failed to start ElevenLabs session:", err);
+      try { await conversation.endSession(); } catch { /* ignore */ }
+      stopAudioAnalysis();
+      if (acousticSendInterval.current) {
+        clearInterval(acousticSendInterval.current);
+        acousticSendInterval.current = null;
+      }
+      setIsActive(false);
       addNudge("Failed to connect to voice agent.", "warning");
     }
-  }, [scenario, conversation, startAudioAnalysis, addNudge, agent]);
+  }, [scenario, productKey, conversation, startAudioAnalysis, stopAudioAnalysis, addNudge, agent]);
 
   // End session — score via LLM judge, then return
   const endSession = useCallback(async () => {

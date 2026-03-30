@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
@@ -42,22 +42,6 @@ const CONTOUR_LEVELS = 14;
 const UPSAMPLE = 4;
 
 // --------------- helpers ---------------
-
-function sentimentToColor(s: number): THREE.Color {
-  // -1 red → 0 orange → 1 green
-  if (s >= 0) {
-    return new THREE.Color().lerpColors(
-      new THREE.Color(0xf59e0b), // orange
-      new THREE.Color(COLORS.green),
-      s,
-    );
-  }
-  return new THREE.Color().lerpColors(
-    new THREE.Color(COLORS.red),
-    new THREE.Color(0xf59e0b),
-    s + 1,
-  );
-}
 
 function gaussianSmooth(src: Float32Array, w: number, h: number): Float32Array {
   let a = new Float32Array(src);
@@ -269,7 +253,7 @@ export function ConversationTerrain({
   } | null>(null);
 
   const buildTerrain = useCallback(
-    (scene: THREE.Scene, renderer: THREE.WebGLRenderer, camera: THREE.OrthographicCamera) => {
+    (scene: THREE.Scene, renderer: THREE.WebGLRenderer, _camera: THREE.OrthographicCamera) => {
       const st = stateRef.current;
       if (!st) return;
 
@@ -291,7 +275,7 @@ export function ConversationTerrain({
 
       if (data.length < 2) return;
 
-      const { heightfield, sentimentField, segX, segZ, worldD, topics } = buildHeightfield(data, mode);
+      const { heightfield, sentimentField: _sentimentField, segX, segZ, worldD, topics } = buildHeightfield(data, mode);
 
       // --- Terrain mesh ---
       const geo = new THREE.PlaneGeometry(TERRAIN_WIDTH, worldD, segX, segZ);
@@ -381,10 +365,17 @@ export function ConversationTerrain({
 
       // --- Sweep animation via clip plane ---
       const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), -worldD / 2);
+      const setMaterialClippingPlanes = (material: THREE.Material | THREE.Material[], planes: THREE.Plane[]) => {
+        if (Array.isArray(material)) {
+          material.forEach((m) => { m.clippingPlanes = planes; });
+          return;
+        }
+        material.clippingPlanes = planes;
+      };
       st.contourGroup.children.forEach((ch) => {
-        (ch as THREE.LineSegments).material.clippingPlanes = [clipPlane];
+        setMaterialClippingPlanes((ch as THREE.LineSegments).material, [clipPlane]);
       });
-      if (st.terrainMesh) (st.terrainMesh.material as THREE.Material).clippingPlanes = [clipPlane];
+      if (st.terrainMesh) setMaterialClippingPlanes(st.terrainMesh.material, [clipPlane]);
       renderer.localClippingEnabled = true;
 
       const sweepStart = performance.now();
@@ -398,9 +389,9 @@ export function ConversationTerrain({
           requestAnimationFrame(animSweep);
         } else {
           st.contourGroup?.children.forEach((ch) => {
-            (ch as THREE.LineSegments).material.clippingPlanes = [];
+            setMaterialClippingPlanes((ch as THREE.LineSegments).material, []);
           });
-          if (st.terrainMesh) (st.terrainMesh.material as THREE.Material).clippingPlanes = [];
+          if (st.terrainMesh) setMaterialClippingPlanes(st.terrainMesh.material, []);
         }
       })();
 

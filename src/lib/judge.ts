@@ -95,7 +95,7 @@ Provide 3-6 annotations marking key moments (good openings, missed opportunities
   const result = await generateText({
     model: workersai("@cf/moonshotai/kimi-k2.5"),
     prompt,
-    maxTokens: 2000,
+    maxOutputTokens: 2000,
   });
 
   try {

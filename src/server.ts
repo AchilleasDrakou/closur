@@ -102,6 +102,7 @@ export class CoachAgent extends AIChatAgent<Env> {
   @callable()
   async setScenario(scenario: Scenario) {
     this.activeScenario = scenario;
+    this.lastAcousticNudgeTime = 0;
     this.convState = {
       turnCount: 0,
       topicsCovered: [],
@@ -109,6 +110,8 @@ export class CoachAgent extends AIChatAgent<Env> {
       lastAnalysis: null,
       recentAcoustic: [],
     };
+    this.ctx.storage.sql.exec(`DELETE FROM acoustic_data`);
+    this.ctx.storage.sql.exec(`DELETE FROM nudges`);
   }
 
   // Store acoustic data + check thresholds for nudges
