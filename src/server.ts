@@ -300,6 +300,27 @@ export class CoachAgent extends AIChatAgent<Env> {
   }
 }
 
+// ── Rate limiter ─────────────────────────────────────────────────────
+
+const rateLimitMap = new Map<string, { count: number; reset: number }>();
+const RATE_LIMIT = 30; // requests per window
+const RATE_WINDOW = 60_000; // 1 minute
+
+function rateLimit(c: { req: { header: (name: string) => string | undefined }; json: (data: unknown, status: number) => Response }) {
+  const ip = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "unknown";
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.reset) {
+    rateLimitMap.set(ip, { count: 1, reset: now + RATE_WINDOW });
+    return null;
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT) {
+    return c.json({ error: "Rate limit exceeded" }, 429);
+  }
+  return null;
+}
+
 // ── Hono API routes ───────────────────────────────────────────────────
 
 const api = new Hono<{ Bindings: Env }>();
@@ -321,6 +342,8 @@ api.get("/api/scenarios/:id", (c) => {
 
 // Scrape product URL
 api.post("/api/scrape", async (c) => {
+  const limited = rateLimit(c);
+  if (limited) return limited;
   let body: { url?: string };
   try {
     body = await c.req.json<{ url: string }>();
@@ -335,9 +358,21 @@ api.post("/api/scrape", async (c) => {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return c.json({ error: "HTTPS URLs only" }, 400);
     const host = parsed.hostname.toLowerCase();
-    if (host === "localhost" || host.startsWith("127.") || host.startsWith("10.") ||
-        host.startsWith("192.168.") || host.startsWith("172.") || host === "169.254.169.254" ||
-        host.endsWith(".internal") || host.endsWith(".local")) {
+    // Strip brackets from IPv6
+    const bare = host.replace(/^\[|\]$/g, "");
+    // Block IPv6 loopback, mapped, and link-local
+    if (bare === "::1" || bare.startsWith("::ffff:") || bare.startsWith("0:") ||
+        bare.startsWith("fe80:") || bare.startsWith("fc00:") || bare.startsWith("fd")) {
+      return c.json({ error: "Private/reserved hosts not allowed" }, 400);
+    }
+    // Block private IPv4, link-local, metadata, localhost, octal/decimal tricks
+    if (host === "localhost" || host === "0.0.0.0" ||
+        host.startsWith("127.") || host.startsWith("10.") ||
+        host.startsWith("192.168.") || host.startsWith("169.254.") ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+        host.endsWith(".internal") || host.endsWith(".local") ||
+        // Block numeric IPs (decimal/octal bypass)
+        /^\d+$/.test(host) || /^0\d/.test(host) || /^0x/i.test(host)) {
       return c.json({ error: "Private/reserved hosts not allowed" }, 400);
     }
   } catch {
@@ -381,25 +416,32 @@ api.post("/api/scrape", async (c) => {
       profile = { name: "Unknown", description: markdown.slice(0, 200), valueProps: [], pricing: "Not found", targetAudience: "Unknown", commonObjections: [] };
     }
 
-    // Store in KV
-    const key = `product:${btoa(url).slice(0, 40)}`;
+    // Store in KV (SHA-256 hash to avoid collisions)
+    const hashBuf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(url));
+    const hashHex = [...new Uint8Array(hashBuf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const key = `product:${hashHex}`;
     await c.env.KV.put(key, JSON.stringify(profile));
 
     return c.json({ profile, key });
   } catch (error) {
-    return c.json({ error: String(error) }, 500);
+    console.error("[scrape] failed:", error);
+    return c.json({ error: "Failed to process URL" }, 500);
   }
 });
 
 // Get product profile
 api.get("/api/product/:key", async (c) => {
-  const value = await c.env.KV.get(c.req.param("key"));
+  const key = c.req.param("key");
+  if (!key.startsWith("product:")) return c.json({ error: "Invalid key" }, 400);
+  const value = await c.env.KV.get(key);
   if (!value) return c.json({ error: "Not found" }, 404);
   return c.json(JSON.parse(value));
 });
 
 // Generate ElevenLabs agent config for a scenario
 api.post("/api/agent-config", async (c) => {
+  const limited = rateLimit(c);
+  if (limited) return limited;
   const { scenarioId, productKey } = await c.req.json<{ scenarioId: string; productKey?: string }>();
   const scenario = DEFAULT_SCENARIOS.find((s) => s.id === scenarioId);
   if (!scenario) return c.json({ error: "Scenario not found" }, 404);
@@ -431,6 +473,8 @@ ${productContext}`;
 
 // Get signed URL for ElevenLabs Conversational AI
 api.post("/api/signed-url", async (c) => {
+  const limited = rateLimit(c);
+  if (limited) return limited;
   const { scenarioId, productKey } = await c.req.json<{ scenarioId: string; productKey?: string }>();
   const scenario = DEFAULT_SCENARIOS.find((s) => s.id === scenarioId);
   if (!scenario) return c.json({ error: "Scenario not found" }, 404);
