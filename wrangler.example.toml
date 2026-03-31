@@ -1,0 +1,28 @@
+name = "closur"
+main = "src/server.ts"
+compatibility_date = "2026-03-02"
+compatibility_flags = ["nodejs_compat"]
+
+[ai]
+binding = "AI"
+remote = true
+
+[assets]
+directory = "./public"
+not_found_handling = "single-page-application"
+run_worker_first = ["/agents/*", "/api/*"]
+
+[[durable_objects.bindings]]
+class_name = "CoachAgent"
+name = "CoachAgent"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "<your-kv-namespace-id>"
+
+[browser]
+binding = "BROWSER"
+
+[[migrations]]
+new_sqlite_classes = ["CoachAgent"]
+tag = "v1"
