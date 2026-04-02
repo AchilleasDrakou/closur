@@ -6,7 +6,6 @@ import { generateText } from "ai";
 import {
   analyzeTranscriptWithAI,
   checkAcousticNudges,
-  evaluateLiveNudgePolicy,
   type ConversationState,
   type AcousticSnapshot,
   type NudgeResult
@@ -147,26 +146,6 @@ export class CoachAgent extends AIChatAgent<Env> {
     };
     this.ctx.storage.sql.exec(`DELETE FROM acoustic_data`);
     this.ctx.storage.sql.exec(`DELETE FROM nudges`);
-    this.ctx.storage.sql.exec(`DELETE FROM live_events`);
-    this.logLiveEvent("scenario_set", Date.now(), { scenarioId: scenario.id });
-  }
-
-  @callable()
-  async trackClientEvent(event: {
-    type: string;
-    timestamp: number;
-    payload?: Record<string, unknown>;
-  }) {
-    if (event.type === "agent_speaking_started") {
-      this.agentSpeaking = true;
-    } else if (
-      event.type === "agent_listening_started" ||
-      event.type === "session_disconnected" ||
-      event.type === "session_ended"
-    ) {
-      this.agentSpeaking = false;
-    }
-    this.logLiveEvent(event.type, event.timestamp, event.payload);
   }
 
   // Store acoustic data + check thresholds for nudges
@@ -220,15 +199,7 @@ export class CoachAgent extends AIChatAgent<Env> {
         speechActive: true
       };
 
-      const nudges = checkAcousticNudges(
-        avg,
-        {
-          objectives: this.activeScenario?.objectives ?? [],
-          scoring: this.activeScenario?.scoring ?? [],
-          name: this.activeScenario?.name ?? "General"
-        },
-        this.convState
-      );
+      const nudges = checkAcousticNudges(avg);
       for (const nudge of nudges) {
         this.emitNudge(nudge);
       }
@@ -262,11 +233,10 @@ export class CoachAgent extends AIChatAgent<Env> {
       return { confidence: 0.5, hedging: 0.5, key_topics: [] };
     }
 
-    const { analysis, newObjectivesHit } = await analyzeTranscriptWithAI(
+    const { analysis, nudges } = await analyzeTranscriptWithAI(
       this.env.AI,
       text,
       {
-        id: this.activeScenario.id,
         objectives: this.activeScenario.objectives,
         scoring: this.activeScenario.scoring,
         name: this.activeScenario.name
@@ -293,38 +263,9 @@ export class CoachAgent extends AIChatAgent<Env> {
       }
     }
 
-    for (const objective of newObjectivesHit) {
-      if (!this.convState.objectivesHit.includes(objective)) {
-        this.convState.objectivesHit.push(objective);
-      }
-    }
-
-    const recent = this.convState.recentAcoustic.slice(-10);
-    const acousticSummary = recent.length > 0
-      ? {
-          pitch: recent.reduce((sum, snapshot) => sum + snapshot.pitch, 0) / recent.length,
-          energy: recent.reduce((sum, snapshot) => sum + snapshot.energy, 0) / recent.length,
-          pace: recent.reduce((sum, snapshot) => sum + snapshot.pace, 0) / recent.length,
-        }
-      : { pitch: 0, energy: 0, pace: 0 };
-
-    const nudges = evaluateLiveNudgePolicy({
-      scenarioId: this.activeScenario.id,
-      text,
-      pace: acousticSummary.pace,
-      energy: acousticSummary.energy,
-      pitch: acousticSummary.pitch,
-      turnCount: this.convState.turnCount,
-      confidence: analysis.confidence,
-      hedging: analysis.hedging,
-      fillerWords: analysis.filler_words,
-      assertiveness: analysis.assertiveness,
-      sentiment: analysis.sentiment,
-      newObjectivesHit,
-    });
-
-    if (nudges.length > 0) {
-      this.maybeEmitNudge(nudges[0], "transcript");
+    // Emit nudges
+    for (const nudge of nudges) {
+      this.emitNudge(nudge);
     }
 
     return analysis;
@@ -346,11 +287,6 @@ export class CoachAgent extends AIChatAgent<Env> {
       messageCount: this.messages.length,
       conversationState: this.convState
     };
-  }
-
-  @callable()
-  async getLiveEventTimeline() {
-    return this.ctx.storage.sql.exec(`SELECT * FROM live_events ORDER BY timestamp, id`).toArray();
   }
 
   // Score session via LLM judge (kimi-k2.5)
@@ -423,45 +359,6 @@ export class CoachAgent extends AIChatAgent<Env> {
         nudge: { ...nudge, timestamp: now }
       })
     );
-    this.lastNudgeType = nudge.type;
-    this.lastNudgeAt = now;
-    this.lastAcousticNudgeTime = now;
-    this.logLiveEvent("nudge_shown", now, {
-      type: nudge.type,
-      text: nudge.text,
-      urgency: nudge.urgency,
-    });
-  }
-
-  private maybeEmitNudge(nudge: NudgeResult, source: "acoustic" | "transcript") {
-    const now = Date.now();
-    const suppressedReason =
-      this.agentSpeaking ? "agent_speaking"
-      : now - this.lastNudgeAt < 8000 ? "cooldown"
-      : this.lastNudgeType === nudge.type && now - this.lastNudgeAt < 15000 ? "duplicate"
-      : null;
-
-    if (suppressedReason) {
-      this.logLiveEvent("nudge_suppressed", now, {
-        source,
-        reason: suppressedReason,
-        type: nudge.type,
-        text: nudge.text,
-        urgency: nudge.urgency,
-      });
-      return;
-    }
-
-    this.emitNudge(nudge);
-  }
-
-  private logLiveEvent(type: string, timestamp: number, payload?: Record<string, unknown>) {
-    this.ctx.storage.sql.exec(
-      `INSERT INTO live_events (timestamp, type, payload) VALUES (?, ?, ?)`,
-      timestamp,
-      type,
-      JSON.stringify(payload ?? {}),
-    );
   }
 
   private getNudgeKey(text: string) {
@@ -483,14 +380,6 @@ export class CoachAgent extends AIChatAgent<Env> {
         timestamp INTEGER,
         text TEXT,
         urgency TEXT
-      )
-    `);
-    this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS live_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp INTEGER,
-        type TEXT,
-        payload TEXT
       )
     `);
   }

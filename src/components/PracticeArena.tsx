@@ -163,14 +163,6 @@ export function PracticeArena({
     }
   });
 
-  const trackClientEvent = useCallback((type: string, payload?: Record<string, unknown>) => {
-    agent.call("trackClientEvent", [{
-      type,
-      timestamp: Date.now(),
-      payload,
-    }]).catch(console.error);
-  }, [agent]);
-
   // ElevenLabs Conversational AI hook
   const conversation = useConversation({
     onConnect: () => {
@@ -203,16 +195,6 @@ export function PracticeArena({
           const entry = { role: "user" as const, text, timestamp: now };
           transcriptRef.current = [...transcriptRef.current, entry];
           setTranscript([...transcriptRef.current]);
-          lastTranscriptMetricsRef.current = {
-            fillerCount: countFillers(text),
-            transcriptChars: text.length,
-          };
-          trackClientEvent("user_transcript_received", {
-            source,
-            length: text.length,
-            fillerCount: lastTranscriptMetricsRef.current.fillerCount,
-            text: text.slice(0, 500),
-          });
           if (text.trim().length > 10) {
             agent.call("analyzeTranscript", [text]).catch(console.error);
           }
@@ -220,11 +202,6 @@ export function PracticeArena({
           const entry = { role: "agent" as const, text, timestamp: now };
           transcriptRef.current = [...transcriptRef.current, entry];
           setTranscript([...transcriptRef.current]);
-          trackClientEvent("agent_transcript_received", {
-            source,
-            length: text.length,
-            text: text.slice(0, 500),
-          });
         }
       } catch {
         /* ignore malformed messages */
@@ -304,21 +281,6 @@ export function PracticeArena({
 
         // Voice activity detection (simple threshold)
         const isVoiceActive = energy > 0.02;
-        if (isVoiceActive && !userVoiceActiveRef.current) {
-          userVoiceActiveRef.current = true;
-          utteranceStartRef.current = Date.now();
-          trackClientEvent("user_voice_started", {
-            energy,
-            pitch: Math.min(pitch / 500, 1),
-          });
-        } else if (!isVoiceActive && userVoiceActiveRef.current) {
-          userVoiceActiveRef.current = false;
-          const utteranceDurationMs = utteranceStartRef.current ? Date.now() - utteranceStartRef.current : 0;
-          utteranceStartRef.current = null;
-          lastUtteranceDurationRef.current = utteranceDurationMs;
-          pauseCountRef.current += 1;
-          trackClientEvent("user_voice_stopped", { energy, utteranceDurationMs });
-        }
         if (isVoiceActive) {
           wordCount++;
         }
@@ -362,7 +324,7 @@ export function PracticeArena({
       console.error("Failed to start audio analysis:", err);
       throw err;
     }
-  }, [trackClientEvent]);
+  }, []);
 
   const stopAudioAnalysis = useCallback(() => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -670,11 +632,6 @@ export function PracticeArena({
     const transcript = transcriptRef.current;
     setIsStarting(false);
     setIsActive(false);
-    trackClientEvent("session_ended", {
-      scenarioId: scenario.id,
-      duration,
-      transcriptTurns: transcript.length,
-    });
 
     // Score session via LLM judge
     let score: SessionScore | undefined;
