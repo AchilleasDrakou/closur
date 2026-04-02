@@ -150,11 +150,25 @@ export function AudioReactiveOrb({ audioLevel, className }: AudioReactiveOrbProp
     if (!container) return;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0, 0, 4);
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+
+    // Adapt camera distance so orb fills ~60% of the smaller viewport dimension
+    const fitDistance = () => {
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const aspect = cw / ch;
+      // Base distance for a 600px viewport, scale inversely with size
+      const minDim = Math.min(cw, ch);
+      const scale = Math.max(0.6, Math.min(1.4, 600 / minDim));
+      // Pull camera back for portrait, push in for landscape
+      return (aspect < 1 ? 4.5 : 3.5) * scale;
+    };
+    camera.position.set(0, 0, fitDistance());
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x0a0a0f, 1);
     container.appendChild(renderer.domElement);
@@ -197,14 +211,15 @@ export function AudioReactiveOrb({ audioLevel, className }: AudioReactiveOrbProp
     const glowSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(1.4, 3), glowMaterial);
     scene.add(glowSphere);
 
-    // Resize handler
+    // Resize handler — refit camera distance + aspect
     const onResize = () => {
       if (!container) return;
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      camera.aspect = w / h;
+      const rw = container.clientWidth;
+      const rh = container.clientHeight;
+      camera.aspect = rw / rh;
+      camera.position.z = fitDistance();
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      renderer.setSize(rw, rh);
     };
     window.addEventListener("resize", onResize);
 
